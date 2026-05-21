@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Log4j2 Configuration -->
+<!-- status="WARN" controls the level of internal Log4j2 logging -->
+<Configuration status="WARN">
+	<Appenders>
+		<!-- Console appender configuration -->
+		<Console name="CONSOLE">
+			<!-- Pattern matches the original log4j format -->
+			<PatternLayout pattern="%d{ABSOLUTE} %-5p [%c{1}] %m%n"/>
+			<ThresholdFilter level="INFO"/>
+		</Console>
+
+		<!-- Rolling File appender with improved capabilities over log4j 1.x -->
+		<RollingFile name="FILE"
+					 fileName="../log/server.log"
+					 filePattern="../log/server-%d{yyyy-MM-dd}-%i.log">
+			<!-- Pattern matches the original log4j format -->
+			<PatternLayout pattern="%d %-5p [%c{1}] (%t) %m%n"/>
+			<ThresholdFilter level="INFO"/>
+			<!-- Added rolling policies (not in log4j 1.x) -->
+			<Policies>
+				<!-- Roll over when file reaches 10MB -->
+				<SizeBasedTriggeringPolicy size="10 MB"/>
+			</Policies>
+			<!-- Keep at most 10 files -->
+			<DefaultRolloverStrategy max="10"/>
+		</RollingFile>
+	</Appenders>
+
+	<Loggers>
+		<!-- Logger configurations for specific packages -->
+		<Logger name="org.mobicents.media.server" level="INFO"/>
+		<Logger name="org.mobicents.media.server.impl.rtp" level="INFO"/>
+
+		<!-- Root logger configuration -->
+		<Root level="INFO">
+			<AppenderRef ref="CONSOLE"/>
+			<AppenderRef ref="FILE"/>
+		</Root>
+	</Loggers>
+</Configuration>

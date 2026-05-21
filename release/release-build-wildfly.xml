@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="Release_build" default="deploy">
+
+	<path id="xmltask.path">
+	    <pathelement path="${basedir}/xmltask.jar" />
+	</path>
+	<taskdef name="xmltask" classpathref="xmltask.path" classname="com.oopsconsultancy.xmltask.ant.XmlTask" />
+
+	<property name="home" value="${ant.file.Release_build}/../" />
+
+	<!-- SYSTEM RELATED -->
+	<property environment="system" />
+	<property name="jboss.home" value="${system.JBOSS_HOME}" />
+	<property name="jboss.deploy" value="${jboss.home}/standalone/deployments" />
+
+	<property name="jboss.modules.path" value="${jboss.home}/modules/system/layers/base" />
+	<property name="jboss.standalone.path" value="${jboss.home}/standalone" />
+	<property name="restcomm-ss7.path" value="${jboss.modules.path}/org/restcomm/ss7" />
+
+
+    <!-- Permissions extension properties -->
+    <property name="permission.extension.version" value="1.0.0-9"/>
+    <property name="permission.extension.url" value="http://45.79.17.57/PAIC_Extended/permission-extension/Permission-Extensions-${permission.extension.version}.zip"/>
+    <property name="permission.tmp.dir" value="${basedir}/tmp/permission-extension"/>
+    <property name="permission.module.dir" value="${jboss.modules.path}/org/paicbd/permission/bootstrap/main"/>
+
+    <!-- log4j properties -->
+    <property name="log4j.version" value="2.25.3"/>
+    <property name="log4j.root.url" value="https://repo1.maven.org/maven2/org/apache/logging/log4j"/>
+    <property name="log4j.core.url" value="${log4j.root.url}/log4j-core/${log4j.version}/log4j-core-${log4j.version}.jar"/>
+    <property name="log4j.api.url" value="${log4j.root.url}/log4j-api/${log4j.version}/log4j-api-${log4j.version}.jar"/>
+    <property name="log4j.tmp.dir" value="${basedir}/tmp/log4j"/>
+    <property name="log4j.module.dir" value="${jboss.modules.path}/org/apache/logging/log4j/main"/>
+
+
+	<condition property="file_url" value="file:/">
+		<os family="windows" />
+	</condition>
+	<!-- Property already set on windows platform -->
+	<property name="file_url" value="file://" />
+
+	<pathconvert targetos="unix" property="jboss.home.standard">
+		<path description="To use te same stile for every url file" path="${jboss.home}" />
+	</pathconvert>
+
+	<target name="deploy" depends="install-permission-extension,install-log4j">
+
+		<!-- adding of "name="com/sun/nio/sctp"/>" into jdk/main/module.xml -->
+		<xmltask source="${jboss.modules.path}/sun/jdk/main/module.xml" dest="${jboss.modules.path}/sun/jdk/main/module.xml">
+			<remove path="/:module/:dependencies/:system/:paths/:path[@name='com/sun/nio/sctp']"/>
+			<insert path="/:module/:dependencies/:system/:paths/:path[last()]" position="after">
+				<![CDATA[<path xmlns="urn:jboss:module:1.3" name="com/sun/nio/sctp"/>]]> 
+			</insert>
+		</xmltask> 
+
+		<!-- adding of "org.restcomm.ss7.modules" name="com/sun/nio/sctp"/>" into /org/restcomm/slee/container/lib/main/module.xml -->
+		<xmltask source="${jboss.modules.path}/org/restcomm/slee/container/lib/main/module.xml" dest="${jboss.modules.path}/org/restcomm/slee/container/lib/main/module.xml">
+			<remove path="/:module/:dependencies/:module[@name='org.restcomm.ss7.modules']"/>
+			<insert path="/:module/:dependencies/:module[last()]" position="after">
+				<![CDATA[<module xmlns="urn:jboss:module:1.0" name="org.restcomm.ss7.modules" export="true"/>]]> 
+			</insert>
+		</xmltask> 
+
+		<!-- adding of a security domain into standalone.xml -->
+		<!-- Commenting since we are not using this method fof authentication, for reference ESMS-357
+		<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+			<remove path="/:server/:profile/*[local-name()='subsystem']/*[local-name()='security-domains']/*[local-name()='security-domain' and @name='jmx-console']"/>
+			<insert path="/:server/:profile/*[local-name()='subsystem']/*[local-name()='security-domains']/*[local-name()='security-domain'][last()]" position="after" file="template/security-domains.txt"></insert>
+		</xmltask>
+		-->
+
+		<!-- adding of "<extension module="org.restcomm.ss7.extension"/>" into standalone.xml -->
+		<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+			<insert path="/:server/:extensions/:extension[last()]" position="after">
+                <![CDATA[<extension xmlns="urn:jboss:domain:17.0" module="org.restcomm.ss7.extension"/>]]>
+			</insert>
+		</xmltask>
+
+		<!-- adding of ss7 subsystem into standalone.xml -->
+		<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+			<remove path="/:server/:profile/*[local-name()='subsystem'][*[local-name()='mbean'][namespace-uri()='urn:org.restcomm:ss7-wildfly:1.0'][@reflection]]"/>
+			<insert path="/:server/:profile/*[local-name()='subsystem'][last()]" position="after" file="template/wildfly-jss7-subsystem.txt"></insert>
+		</xmltask>
+
+        <xmltask source="${jboss.standalone.path}/configuration/standalone.xml"
+                 dest="${jboss.standalone.path}/configuration/standalone.xml">
+            <remove path="/:server/:extensions/:extension[@module='org.paicbd.permission.bootstrap']"/>
+            <insert path="/:server/:extensions/:extension[last()]" position="after">
+                <![CDATA[<extension xmlns="urn:jboss:domain:17.0" module="org.paicbd.permission.bootstrap"/>]]>
+            </insert>
+        </xmltask>
+
+        <xmltask source="${jboss.standalone.path}/configuration/standalone.xml"
+                 dest="${jboss.standalone.path}/configuration/standalone.xml">
+            <remove path="/:server/:profile/:subsystem[@xmlns='urn:org.paicbd:permission-extensions:1.0']"/>
+            <insert path="/:server/:profile" position="last-child">
+                <![CDATA[<subsystem xmlns="urn:org.paicbd:permission-extensions:1.0">
+    <mbean name="PermissionManagement" type="PermissionManagement"/>
+</subsystem>]]>
+            </insert>
+        </xmltask>
+
+		<!-- Copy jSS7 Extension with Modules -->
+		<copy overwrite="true" todir="${restcomm-ss7.path}">
+			<fileset dir="${basedir}/restcomm-ss7-service">
+				<include name="*/**" />
+			</fileset>
+		</copy>
+
+		<copy overwrite="true" todir="${jboss.home}/bin">
+			<fileset dir="${basedir}/../ss7/shell/bin">
+				<include name="**" />
+			</fileset>			
+		</copy>
+
+		<copy overwrite="true" todir="${jboss.home}/lib">
+			<fileset dir="${basedir}/../ss7/shell/lib">
+				<include name="**" />
+			</fileset>			
+		</copy>
+	
+		<copy overwrite="true" todir="${jboss.home}/key">
+                        <fileset dir="${basedir}/../key">
+                                <include name="**" />
+                        </fileset>
+                </copy>
+	
+		<copy overwrite="true" todir="${jboss.deploy}">
+                        <fileset dir="${basedir}/../oam/new-ui">
+                                <include name="**" />
+                        </fileset>
+                </copy>
+
+		<copy overwrite="true" todir="${jboss.deploy}">
+                        <fileset dir="${basedir}/../sniffer/sniffer-metrics">
+                                <include name="**" />
+                        </fileset>
+                </copy>
+
+		<copy overwrite="true" todir="${jboss.standalone.path}/configuration">
+			<fileset dir="${basedir}/template">
+				<include name="jmx-roles.properties" />
+				<include name="jmx-users.properties" />
+			</fileset>			
+		</copy>
+
+        <mkdir dir="${jboss.standalone.path}/data" />
+
+        <copy file="template/permission-ext-admin-user.txt"
+              tofile="${jboss.standalone.path}/data/PermissionManagement_users.xml"
+              overwrite="true"/>
+
+        <copy overwrite="true" todir="${jboss.deploy}">
+            <fileset dir="${permission.tmp.dir}/Permission-Extensions-${permission.extension.version}/ui">
+                <include name="**" />
+            </fileset>
+        </copy>
+
+        <!--  XML Formatting & Beautification for the standalone.xml file -->
+        <exec executable="xmllint" failonerror="false">
+            <arg value="--format"/>
+            <arg value="--output"/>
+            <arg value="${jboss.standalone.path}/configuration/standalone-formatted.xml"/>
+            <arg value="${jboss.standalone.path}/configuration/standalone.xml"/>
+        </exec>
+
+        <move file="${jboss.standalone.path}/configuration/standalone-formatted.xml"
+              tofile="${jboss.standalone.path}/configuration/standalone.xml"/>
+
+        <!-- Add log4j core to org/restcomm/ss7/extension/main/module.xml -->
+        <xmltask source="${jboss.modules.path}/org/restcomm/ss7/extension/main/module.xml" dest="${jboss.modules.path}/org/restcomm/ss7/extension/main/module.xml">
+            <remove path="/:module/:dependencies/:module[@name='org.apache.logging.log4j']"/>
+            <insert path="/:module/:dependencies/:module[last()]" position="after">
+                <![CDATA[<module xmlns="urn:jboss:module:1.3" name="org.apache.logging.log4j"/>]]>
+            </insert>
+        </xmltask>
+
+
+        <!-- Add log4j core to org/restcomm/ss7/modules/main/module.xml -->
+        <xmltask source="${jboss.modules.path}/org/restcomm/ss7/modules/main/module.xml" dest="${jboss.modules.path}/org/restcomm/ss7/modules/main/module.xml">
+            <remove path="/:module/:dependencies/:module[@name='org.apache.logging.log4j']"/>
+            <insert path="/:module/:dependencies/:module[last()]" position="after">
+                <![CDATA[<module xmlns="urn:jboss:module:1.3" name="org.apache.logging.log4j"/>]]>
+            </insert>
+        </xmltask>
+
+        <!-- Add log4j core to org/restcomm/ss7/commons/main/module.xml -->
+        <xmltask source="${jboss.modules.path}/org/restcomm/ss7/commons/main/module.xml" dest="${jboss.modules.path}/org/restcomm/ss7/commons/main/module.xml">
+            <remove path="/:module/:dependencies/:module[@name='org.apache.logging.log4j']"/>
+            <insert path="/:module/:dependencies/:module[last()]" position="after">
+                <![CDATA[<module xmlns="urn:jboss:module:1.3" name="org.apache.logging.log4j"/>]]>
+            </insert>
+        </xmltask>
+
+
+        <!-- Remove the whitespaces generated by the log4j module addition -->
+        <exec executable="xmllint" failonerror="false">
+            <arg value="--format"/>
+            <arg value="--output"/>
+            <arg value="${jboss.modules.path}/org/restcomm/ss7/extension/main/module-formatted.xml"/>
+            <arg value="${jboss.modules.path}/org/restcomm/ss7/extension/main/module.xml"/>
+        </exec>
+        <move file="${jboss.modules.path}/org/restcomm/ss7/extension/main/module-formatted.xml"
+              tofile="${jboss.modules.path}/org/restcomm/ss7/extension/main/module.xml"/>
+
+        <exec executable="xmllint" failonerror="false">
+            <arg value="--format"/>
+            <arg value="--output"/>
+            <arg value="${jboss.modules.path}/org/restcomm/ss7/modules/main/module-formatted.xml"/>
+            <arg value="${jboss.modules.path}/org/restcomm/ss7/modules/main/module.xml"/>
+        </exec>
+        <move file="${jboss.modules.path}/org/restcomm/ss7/modules/main/module-formatted.xml"
+              tofile="${jboss.modules.path}/org/restcomm/ss7/modules/main/module.xml"/>
+
+        <exec executable="xmllint" failonerror="false">
+            <arg value="--format"/>
+            <arg value="--output"/>
+            <arg value="${jboss.modules.path}/org/restcomm/ss7/commons/main/module-formatted.xml"/>
+            <arg value="${jboss.modules.path}/org/restcomm/ss7/commons/main/module.xml"/>
+        </exec>
+        <move file="${jboss.modules.path}/org/restcomm/ss7/commons/main/module-formatted.xml"
+              tofile="${jboss.modules.path}/org/restcomm/ss7/commons/main/module.xml"/>
+
+	</target>
+
+    <target name="install-permission-extension">
+
+        <echo message="Installing Permission Extension ${permission.extension.version}"/>
+
+        <delete dir="${permission.tmp.dir}" quiet="true"/>
+        <mkdir dir="${permission.tmp.dir}"/>
+
+        <get src="${permission.extension.url}"
+             dest="${permission.tmp.dir}/permission-extension.zip"
+             verbose="true"
+             usetimestamp="true"/>
+
+        <unzip src="${permission.tmp.dir}/permission-extension.zip"
+               dest="${permission.tmp.dir}"/>
+
+        <mkdir dir="${permission.module.dir}"/>
+
+        <copy overwrite="true" todir="${permission.module.dir}">
+            <fileset dir="${permission.tmp.dir}/Permission-Extensions-${permission.extension.version}/wildfly/permission-extension/main">
+                <include name="**/*"/>
+            </fileset>
+        </copy>
+    </target>
+
+    <target name="install-log4j">
+
+        <echo message="Installing log4j dependencies ${log4j.version}"/>
+
+        <delete dir="${log4j.tmp.dir}" quiet="true"/>
+        <mkdir dir="${log4j.tmp.dir}"/>
+
+        <get src="${log4j.core.url}"
+             dest="${log4j.tmp.dir}/log4j-core-${log4j.version}.jar"
+             verbose="true"
+             usetimestamp="true"/>
+
+        <get src="${log4j.api.url}"
+             dest="${log4j.tmp.dir}/log4j-api-${log4j.version}.jar"
+             verbose="true"
+             usetimestamp="true"/>
+
+        <mkdir dir="${log4j.module.dir}"/>
+
+        <copy overwrite="true" todir="${log4j.module.dir}">
+            <fileset dir="${log4j.tmp.dir}/">
+                <include name="**/*"/>
+            </fileset>
+        </copy>
+
+        <copy file="template/wildfly-logging-module.txt"
+              tofile="${log4j.module.dir}/module.xml"
+              overwrite="true"/>
+
+    </target>
+
+	<target name="undeploy">
+
+		<xmltask source="${jboss.modules.path}/sun/jdk/main/module.xml" dest="${jboss.modules.path}/sun/jdk/main/module.xml">
+			<remove path="/:module/:dependencies/:system/:paths/:path[@name='com/sun/nio/sctp']"/>
+		</xmltask> 
+
+		<xmltask source="${jboss.modules.path}/org/restcomm/slee/container/lib/main/module.xml" dest="${jboss.modules.path}/org/restcomm/slee/container/lib/main/module.xml">
+			<remove path="/:module/:dependencies/:module[@name='org.restcomm.ss7.modules']"/>
+		</xmltask> 
+
+		<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+			<remove path="/:server/:profile/*[local-name()='subsystem']/*[local-name()='security-domains']/*[local-name()='security-domain' and @name='jmx-console']"/>
+		</xmltask> 
+
+		<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+			<remove path="/:server/:extensions/:extension[@module='org.restcomm.ss7.extension']"/>
+		</xmltask>
+
+		<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+			<remove path="/:server/:profile/*[local-name()='subsystem'][*[local-name()='mbean'][namespace-uri()='urn:org.restcomm:ss7-wildfly:1.0'][@reflection]]"/>
+		</xmltask>
+
+		<delete dir="${restcomm-ss7.path}" />
+
+		<delete file="${jboss.home}/bin/ss7-cli.sh" />
+		<delete file="${jboss.home}/bin/ss7-cli.bat" />
+
+		<delete verbose="true">
+			<fileset dir="${jboss.home}/lib" includes="**/jansi-*.jar"/>
+		</delete>
+		<delete verbose="true">
+			<fileset dir="${jboss.home}/lib" includes="**/javolution-*.jar"/>
+		</delete>
+		<delete verbose="true">
+			<fileset dir="${jboss.home}/lib" includes="**/jreadline-*.jar"/>
+		</delete>
+		<delete verbose="true">
+			<fileset dir="${jboss.home}/lib" includes="**/shell-transport-*.jar"/>
+		</delete>
+		<delete file="${jboss.home}/lib/m3ua-cli-m3ua.jar" />
+		<delete file="${jboss.home}/lib/m3ua-cli-sctp.jar" />
+		<delete file="${jboss.home}/lib/restcomm-ss7-shell.jar" />
+		<delete file="${jboss.home}/lib/sccp-cli.jar" />
+		<delete file="${jboss.home}/lib/tcap-ansi-cli.jar" />
+		<delete file="${jboss.home}/lib/tcap-cli.jar" />
+
+		<delete file="${jboss.standalone.path}/configuration/jmx-roles.properties" />
+		<delete file="${jboss.standalone.path}/configuration/jmx-users.properties" />
+	</target>
+	
+	<target name="deploy-commons">
+		<copy overwrite="true" todir="${restcomm-ss7.path}/commons">
+			<fileset dir="${basedir}/restcomm-ss7-service/commons">
+				<include name="*/**" />
+			</fileset>
+		</copy>
+	</target>
+		
+	<target name="undeploy-commons">
+		<delete dir="${restcomm-ss7.path}/commons" />
+	</target>
+	
+	<target name="deploy-with-logging" depends="deploy">
+			<xmltask source="${jboss.standalone.path}/configuration/standalone.xml" dest="${jboss.standalone.path}/configuration/standalone.xml">
+				<remove path="/:server/:profile/*[local-name()='subsystem'][*[namespace-uri()='urn:jboss:domain:logging:3.0']]" />
+				<insert path="/:server/:profile/*[local-name()='subsystem'][last()]" position="after" file="template/ss7-logging-subsystem.txt" />
+			</xmltask>
+	</target>
+	
+</project>
